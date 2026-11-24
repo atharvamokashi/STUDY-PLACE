@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172554">
+<meta name="description" content="A personal study dashboard for six engineering subjects.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>My Study Hub</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#172033;background:#f4f6fb}
+*{box-sizing:border-box}body{margin:0}header{background:#172554;color:white;padding:22px max(18px,calc((100% - 960px)/2));}
+header h1{margin:8px 0 4px;font-size:1.8rem}header p{margin:0;color:#cbd5e1}
+main{max-width:960px;margin:auto;padding:18px}.stats,.subjects,.tabs{display:grid;gap:10px}
+.stats{grid-template-columns:repeat(3,1fr);margin:14px 0}.stat,.subject,.panel,.task{background:white;border:1px solid #e1e6ef;border-radius:14px;padding:14px}
+.stat strong{display:block;font-size:1.4rem}.muted{color:#64748b;font-size:.88rem}
+.subjects{grid-template-columns:repeat(2,minmax(0,1fr))}
+button{border:0;border-radius:10px;padding:10px 13px;background:#2563eb;color:white;font:inherit;cursor:pointer}
+button.secondary{background:#e8eefb;color:#1e3a8a}button.danger{background:#fee2e2;color:#991b1b}
+.subject{cursor:pointer;text-align:left;color:#172033}.subject.active{outline:2px solid #2563eb}
+.subject strong{display:block;margin:6px 0}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.tabs{grid-template-columns:repeat(5,1fr);margin:12px 0}
+.tabs button{padding:9px 4px;font-size:.84rem}.tabs button.active{background:#172554}
+input,textarea{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;font:inherit;margin:5px 0 12px;background:white}
+textarea{min-height:180px;resize:vertical}label{font-size:.9rem;font-weight:600}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.task{margin:9px 0}.task.done{opacity:.7}.task.done .task-title{text-decoration:line-through}
+.progress{height:10px;background:#e2e8f0;border-radius:99px;overflow:hidden}.progress span{display:block;height:100%;background:#2563eb}
+.hidden{display:none!important}.file{display:block;margin:10px 0}.file a{overflow-wrap:anywhere}
+footer{max-width:960px;margin:auto;padding:0 18px 28px;color:#64748b;font-size:.8rem}
+@media(min-width:700px){.subjects{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:420px){.tabs{grid-template-columns:repeat(3,1fr)}main{padding:13px}.stats{gap:7px}.stat{padding:10px}}
+</style>
+</head>
+<body>
+<header><div>🎓 MY STUDY HUB</div><h1>Study Dashboard</h1><p>Your personal engineering study manager</p></header>
+<main>
+<section class="stats">
+ <div class="stat"><strong id="subjectCount">6</strong><span class="muted">Subjects</span></div>
+ <div class="stat"><strong id="taskCount">0</strong><span class="muted">Assignments</span></div>
+ <div class="stat"><strong id="doneCount">0</strong><span class="muted">Completed</span></div>
+</section>
+<section id="home">
+ <h2>Your subjects</h2><p class="muted">Choose a subject to open its separate workspace.</p>
+ <div class="subjects" id="subjectGrid"></div>
+</section>
+<section id="workspace" class="hidden">
+ <div class="toolbar"><button class="secondary" id="backBtn">← All subjects</button><span class="muted" id="subjectLabel"></span></div>
+ <h2 id="workspaceTitle"></h2>
+ <div class="stats">
+  <div class="stat"><strong id="subTaskCount">0</strong><span class="muted">Assignments</span></div>
+  <div class="stat"><strong id="subDoneCount">0</strong><span class="muted">Completed</span></div>
+  <div class="stat"><strong id="subProgress">0%</strong><span class="muted">Progress</span></div>
+ </div>
+ <nav class="tabs" id="tabs">
+  <button data-tab="Overview" class="active">Overview</button><button data-tab="Assignments">Tasks</button>
+  <button data-tab="Notes">Notes</button><button data-tab="PDF Library">PDFs</button><button data-tab="Progress">Progress</button>
+ </nav>
+ <div class="panel" id="panel"></div>
+</section>
+</main>
+<footer>Data is saved on this device in your browser. Export important information regularly. PDF files are stored locally in this browser and are not synced to other devices.</footer>
+<script>
+const subjects=["SPC","H&W","ECLT","MATHS","QUANTUM PHYSICS","AMR"];
+const icons=["📘","💚","💻","🧮","⚛️","🧪"];
+const KEY="my-study-hub-v1";
+let data=JSON.parse(localStorage.getItem(KEY)||"{}");
+data.tasks ||= {}; data.notes ||= {}; data.progress ||= {}; data.files ||= {};
+let current="", tab="Overview", editing=null;
+function save(){localStorage.setItem(KEY,JSON.stringify(data));updateStats()}
+function tasks(){return data.tasks[current] ||= []}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function updateStats(){
+ const all=subjects.flatMap(s=>data.tasks[s]||[]);
+ document.getElementById("taskCount").textContent=all.length;
+ document.getElementById("doneCount").textContent=all.filter(t=>t.done).length;
+}
+function renderHome(){
+ document.getElementById("home").classList.remove("hidden");document.getElementById("workspace").classList.add("hidden");
+ document.getElementById("subjectGrid").innerHTML=subjects.map((s,i)=>`<button class="subject" data-subject="${s}"><span>${icons[i]}</span><strong>${s}</strong><span class="muted">${(data.tasks[s]||[]).length} assignments · ${data.progress[s]||0}% progress</span></button>`).join("");
+ document.querySelectorAll("[data-subject]").forEach(b=>b.onclick=()=>openSubject(b.dataset.subject));
+ updateStats();
+}
+function openSubject(s){current=s;tab="Overview";editing=null;document.getElementById("home").classList.add("hidden");document.getElementById("workspace").classList.remove("hidden");document.getElementById("subjectLabel").textContent=s;document.getElementById("workspaceTitle").textContent=s;renderPanel();window.scrollTo(0,0)}
+document.getElementById("backBtn").onclick=renderHome;
+document.getElementById("tabs").addEventListener("click",e=>{if(e.target.dataset.tab){tab=e.target.dataset.tab;editing=null;renderPanel()}});
+function renderPanel(){
+ document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+ const list=tasks(),done=list.filter(t=>t.done).length,pct=data.progress[current]||0;
+ document.getElementById("subTaskCount").textContent=list.length;document.getElementById("subDoneCount").textContent=done;document.getElementById("subProgress").textContent=pct+"%";
+ const panel=document.getElementById("panel");
+ if(tab==="Overview"){
+  panel.innerHTML=`<h3>Subject overview</h3><p>${list.length} assignments · ${done} completed</p><div class="progress"><span style="width:${pct}%"></span></div><p class="muted">Notes: ${data.notes[current]?"Created":"Not created"} · PDF files: ${(data.files[current]||[]).length}</p><button id="goTasks">Manage assignments</button>`;
+  panel.querySelector("#goTasks").onclick=()=>{tab="Assignments";renderPanel()};
+ }else if(tab==="Assignments"){
+  const item=editing===null?null:list[editing];
+  panel.innerHTML=`<h3>${item?"Edit assignment":"Add an assignment"}</h3>
+  <form id="taskForm"><label>Assignment title</label><input id="taskTitle" required maxlength="120" value="${esc(item?.title||"")}" placeholder="e.g. Complete worksheet 2">
+  <label>Description</label><textarea id="taskDesc" style="min-height:75px" placeholder="Optional details">${esc(item?.desc||"")}</textarea>
+  <label>Deadline</label><input id="taskDate" type="date" value="${esc(item?.date||"")}">
+  <button>${item?"Save changes":"Add assignment"}</button>${item?'<button type="button" class="secondary" id="cancelEdit">Cancel</button>':""}</form>
+  <hr><h3>Your assignments</h3>
+  ${list.length?list.map((t,i)=>`<div class="task ${t.done?"done":""}"><div class="row"><strong class="task-title">${esc(t.title)}</strong><span class="muted">${t.date?esc(t.date):"No deadline"}</span></div><p>${esc(t.desc||"")}</p><div class="toolbar"><button class="secondary" data-done="${i}">${t.done?"Reopen":"Complete"}</button><button class="secondary" data-edit="${i}">Edit</button><button class="danger" data-delete="${i}">Delete</button></div></div>`).join(""):'<p class="muted">No assignments yet.</p>'}`;
+  panel.querySelector("#taskForm").onsubmit=e=>{e.preventDefault();const obj={title:panel.querySelector("#taskTitle").value.trim(),desc:panel.querySelector("#taskDesc").value.trim(),date:panel.querySelector("#taskDate").value,done:item?.done||false};if(editing===null)list.push(obj);else list[editing]=obj;editing=null;save();renderPanel()};
+  panel.querySelector("#cancelEdit")?.addEventListener("click",()=>{editing=null;renderPanel()});
+  panel.querySelectorAll("[data-done]").forEach(b=>b.onclick=()=>{list[+b.dataset.done].done=!list[+b.dataset.done].done;save();renderPanel()});
+  panel.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{editing=+b.dataset.edit;renderPanel()});
+  panel.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>{if(confirm("Delete this assignment?")){list.splice(+b.dataset.delete,1);save();renderPanel()}});
+ }else if(tab==="Notes"){
+  panel.innerHTML=`<h3>${current} notes</h3><textarea id="notes" placeholder="Write your notes here...">${esc(data.notes[current]||"")}</textarea><p class="muted" id="saveMsg">Notes save automatically on this device.</p>`;
+  panel.querySelector("#notes").oninput=e=>{data.notes[current]=e.target.value;save()};
+ }else if(tab==="PDF Library"){
+  const files=data.files[current]||[];
+  panel.innerHTML=`<h3>${current} PDF library</h3><p class="muted">Choose PDFs to keep a local copy in this browser on this device.</p><label class="file">Select PDF files<input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple></label><div id="fileList">${files.map((f,i)=>`<div class="task row"><span>📄 ${esc(f.name)} <span class="muted">(${Math.round(f.size/1024)} KB)</span></span><button class="danger" data-file-delete="${i}">Remove</button></div>`).join("")||'<p class="muted">No PDFs added yet.</p>'}</div>`;
+  panel.querySelector("#pdfInput").onchange=async e=>{for(const f of e.target.files){if(f.size>8*1024*1024){alert(f.name+" is over 8 MB; please choose a smaller PDF.");continue}const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f)});files.push({name:f.name,size:f.size,url})}data.files[current]=files;try{save();renderPanel()}catch(err){alert("Local storage is full. Remove some PDFs and try again.")}};
+  panel.querySelectorAll("[data-file-delete]").forEach(b=>b.onclick=()=>{files.splice(+b.dataset.fileDelete,1);save();renderPanel()});
+  // Render links safely using DOM APIs.
+  const box=panel.querySelector("#fileList");box.innerHTML="";
+  if(!files.length)box.textContent="No PDFs added yet.";
+  files.forEach((f,i)=>{const row=document.createElement("div");row.className="task row";const a=document.createElement("a");a.href=f.url;a.download=f.name;a.textContent="📄 "+f.name;const del=document.createElement("button");del.className="danger";del.textContent="Remove";del.onclick=()=>{files.splice(i,1);save();renderPanel()};row.append(a,del);box.append(row)});
+ }else if(tab==="Progress"){
+  panel.innerHTML=`<h3>Subject progress</h3><strong id="pctLabel">${pct}% complete</strong><input id="progressRange" type="range" min="0" max="100" step="5" value="${pct}"><p class="muted">Update this as you work through the subject.</p>`;
+  panel.querySelector("#progressRange").oninput=e=>{data.progress[current]=+e.target.value;panel.querySelector("#pctLabel").textContent=e.target.value+"% complete";document.getElementById("subProgress").textContent=e.target.value+"%";save()};
+ }
+}
+if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}))}
+renderHome();
+</script>
+</body></html>
